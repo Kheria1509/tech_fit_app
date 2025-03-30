@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:percent_indicator/linear_percent_indicator.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +11,15 @@ import '../services/exercise_service.dart';
 import '../providers/user_provider.dart';
 import '../models/user_model.dart';
 
+// Data class for heart rate chart
+class HeartRateData {
+  final int timeInSeconds;
+  final double heartRate;
+  final bool isATPoint;
+
+  HeartRateData(this.timeInSeconds, this.heartRate, {this.isATPoint = false});
+}
+
 class DeviceTrackingScreen extends StatefulWidget {
   const DeviceTrackingScreen({Key? key}) : super(key: key);
 
@@ -16,7 +27,8 @@ class DeviceTrackingScreen extends StatefulWidget {
   State<DeviceTrackingScreen> createState() => _DeviceTrackingScreenState();
 }
 
-class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
+class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
+    with TickerProviderStateMixin {
   final ExerciseService _exerciseService = ExerciseService();
   Timer? _dataTimer;
   Timer? _durationTimer;
@@ -28,15 +40,43 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
   double _currentCaloriesBurned = 0.0;
   double _currentDistance = 0.0;
 
+  // New variables for anaerobic threshold detection
+  bool _anaerobicThresholdReached = false;
+  int? _atReachedTimeSeconds;
+  double? _atTargetSpeed;
+  bool _isShowingATMessage = false;
+
+  // Animation controllers
+  late AnimationController _atNotificationController;
+
+  // Chart data
   List<double> _speedHistory = [];
   List<double> _heartRateHistory = [];
+  List<HeartRateData> _heartRateChartData = [];
+
+  // Heart rate zones
+  final double _restingHeartRate = 60;
+  final double _maxHeartRate = 190;
+
+  // Chart controller for live updates
+  late ChartSeriesController _chartSeriesController;
 
   StreamSubscription? _dataSubscription;
+
+  // AT detection data
+  double _atSpeed = 0.0;
+  double _atHeartRate = 0.0;
 
   @override
   void initState() {
     super.initState();
     _checkConnection();
+
+    // Initialize animation controllers
+    _atNotificationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
   }
 
   @override
@@ -44,6 +84,7 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
     _dataTimer?.cancel();
     _durationTimer?.cancel();
     _dataSubscription?.cancel();
+    _atNotificationController.dispose();
     super.dispose();
   }
 
@@ -76,6 +117,13 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
       _currentDistance = 0.0;
       _speedHistory = [];
       _heartRateHistory = [];
+      _heartRateChartData = [];
+      _anaerobicThresholdReached = false;
+      _atReachedTimeSeconds = null;
+      _atTargetSpeed = null;
+      _isShowingATMessage = false;
+      _atSpeed = 0.0;
+      _atHeartRate = 0.0;
     });
 
     // Start timer to track session duration
@@ -86,35 +134,78 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
     });
 
     // Subscribe to real-time data stream from device
-    _dataSubscription = _exerciseService.dataStream.listen((data) {
-      setState(() {
-        _currentSpeed = data.speed;
-        _currentHeartRate = data.heartRate;
-
-        // Get calories from data point
-        double pointCalories = data.calories;
-        _currentCaloriesBurned += pointCalories;
-
-        // Calculate distance increment based on speed and time interval (1 second)
-        // Distance = speed (km/h) * time (h) => speed * (1/3600) for 1 second
-        _currentDistance += _currentSpeed * (1 / 3600);
-
-        // Add data points to history for graphs
-        _speedHistory.add(_currentSpeed);
-        _heartRateHistory.add(_currentHeartRate);
-
-        // Keep only the last 60 data points (for a 1-minute view)
-        if (_speedHistory.length > 60) {
-          _speedHistory.removeAt(0);
-        }
-        if (_heartRateHistory.length > 60) {
-          _heartRateHistory.removeAt(0);
-        }
-      });
-    });
+    _dataSubscription = _exerciseService.dataStream.listen(_updateDataPoint);
 
     // Start the data collection from the device
     _exerciseService.startDataCollection();
+  }
+
+  void _detectAnaerobicThreshold() {
+    // Only check if we haven't detected AT yet
+    if (!_anaerobicThresholdReached && _heartRateHistory.length >= 10) {
+      // Simple algorithm to detect deflection in heart rate curve
+      // In a real app, this would be more sophisticated
+
+      // Get the last several heart rate values
+      List<double> recentHeartRates = _heartRateHistory.sublist(
+        _heartRateHistory.length - 10,
+        _heartRateHistory.length,
+      );
+
+      // Check for a deflection pattern
+      // For simulation, we'll use a simple condition:
+      // If heart rate is consistently above 150 and has a specific pattern of change
+      bool isAboveThreshold = recentHeartRates.last > 150;
+      bool hasDeflectionPattern = false;
+
+      // Look for a pattern where HR increases, then stabilizes despite increasing effort
+      if (isAboveThreshold && _elapsedSeconds > 30) {
+        // Calculate rate of change
+        double sumDiffs = 0;
+        for (int i = 1; i < recentHeartRates.length; i++) {
+          sumDiffs += (recentHeartRates[i] - recentHeartRates[i - 1]);
+        }
+        double avgChange = sumDiffs / (recentHeartRates.length - 1);
+
+        // If heart rate change is slowing despite ongoing exercise, it might indicate AT
+        hasDeflectionPattern = avgChange < 0.5 && avgChange > 0;
+      }
+
+      // For demo purposes, we'll also trigger AT around a specific time
+      bool timeBasedTrigger =
+          _elapsedSeconds > 60 && _heartRateHistory.last > 140;
+
+      if ((isAboveThreshold && hasDeflectionPattern) || timeBasedTrigger) {
+        _triggerAnaerobicThreshold();
+      }
+    }
+  }
+
+  void _triggerAnaerobicThreshold() {
+    setState(() {
+      _anaerobicThresholdReached = true;
+      _atReachedTimeSeconds = _elapsedSeconds;
+
+      // Calculate target speed based on current metrics
+      // In a real app, this would use more sophisticated algorithms
+      _atTargetSpeed = max(
+        _currentSpeed - 1.0,
+        3.0,
+      ); // Target is slightly lower than current speed
+
+      // Show notification
+      _isShowingATMessage = true;
+      _atNotificationController.forward(from: 0.0);
+
+      // Auto-dismiss notification after 8 seconds
+      Future.delayed(const Duration(seconds: 8), () {
+        if (mounted) {
+          setState(() {
+            _isShowingATMessage = false;
+          });
+        }
+      });
+    });
   }
 
   Future<void> _endSession() async {
@@ -148,6 +239,46 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
               : _speedHistory.reduce((a, b) => a > b ? a : b),
     );
 
+    // Prepare detailed session data with AT information
+    final detailedSessionData = SessionDetailData(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      date: DateTime.now(),
+      durationMinutes: _elapsedSeconds ~/ 60,
+      totalDistance: _currentDistance,
+      totalCalories: _currentCaloriesBurned.toInt(),
+      averageHeartRate:
+          _heartRateHistory.isEmpty
+              ? 0
+              : _heartRateHistory.reduce((a, b) => a + b) /
+                  _heartRateHistory.length,
+      maxHeartRate:
+          _heartRateHistory.isEmpty
+              ? 0
+              : _heartRateHistory.reduce((a, b) => a > b ? a : b),
+      averageSpeed:
+          _speedHistory.isEmpty
+              ? 0
+              : _speedHistory.reduce((a, b) => a + b) / _speedHistory.length,
+      maxSpeed:
+          _speedHistory.isEmpty
+              ? 0
+              : _speedHistory.reduce((a, b) => a > b ? a : b),
+      atReached: _anaerobicThresholdReached,
+      atReachedTimeSeconds: _atReachedTimeSeconds,
+      atHeartRate: _anaerobicThresholdReached ? _atHeartRate : null,
+      atSpeed: _anaerobicThresholdReached ? _atSpeed : null,
+      atTargetSpeed: _anaerobicThresholdReached ? _atTargetSpeed : null,
+      heartRateData:
+          _heartRateChartData
+              .map(
+                (data) => HeartRatePoint(
+                  timeInSeconds: data.timeInSeconds,
+                  heartRate: data.heartRate,
+                ),
+              )
+              .toList(),
+    );
+
     // Show loading dialog
     showDialog(
       context: context,
@@ -172,6 +303,9 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
         listen: false,
       ).addExerciseSession(sessionData);
 
+      // Save detailed session with AT data
+      await _exerciseService.saveSessionWithATData(detailedSessionData);
+
       // Close loading dialog
       Navigator.pop(context);
 
@@ -193,6 +327,20 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
                   Text(
                     'Distance: ${sessionData.distance.toStringAsFixed(2)} km',
                   ),
+                  if (_anaerobicThresholdReached &&
+                      _atReachedTimeSeconds != null) ...[
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Anaerobic Threshold Reached!',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Time: ${_formatDuration(_atReachedTimeSeconds! ~/ 60, _atReachedTimeSeconds! % 60)}',
+                    ),
+                  ],
                 ],
               ),
               actions: [
@@ -206,9 +354,12 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context); // Close dialog
-                    Navigator.pushReplacementNamed(context, '/stats');
+                    Navigator.pushReplacementNamed(
+                      context,
+                      '/previous_sessions',
+                    );
                   },
-                  child: const Text('View Stats'),
+                  child: const Text('View Sessions'),
                 ),
               ],
             ),
@@ -285,189 +436,379 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Status indicator
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color:
-                      _isSessionActive
-                          ? AppColors.secondary.withOpacity(0.1)
-                          : Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(
-                    AppConstants.borderRadius,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.circle,
-                      size: 12,
-                      color:
-                          _isSessionActive ? AppColors.secondary : Colors.grey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Anaerobic threshold notification
+            if (_isShowingATMessage && _atReachedTimeSeconds != null)
+              AnimatedBuilder(
+                animation: _atNotificationController,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(
+                      0,
+                      -50 * (1 - _atNotificationController.value),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isSessionActive
-                          ? 'Session in progress'
-                          : 'Ready to start',
-                      style: TextStyle(
-                        color:
-                            _isSessionActive
-                                ? AppColors.secondary
-                                : Colors.grey,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Timer display
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    _formatDuration(
-                      _elapsedSeconds ~/ 60,
-                      _elapsedSeconds % 60,
-                    ),
-                    style: const TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Stats grid
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.3,
-                  children: [
-                    _buildStatCard(
-                      title: 'Heart Rate',
-                      value: _currentHeartRate.toStringAsFixed(0),
-                      unit: 'bpm',
-                      icon: Icons.favorite,
-                      color: Colors.red,
-                    ),
-                    _buildStatCard(
-                      title: 'Speed',
-                      value: _currentSpeed.toStringAsFixed(1),
-                      unit: 'km/h',
-                      icon: Icons.speed,
-                      color: AppColors.primary,
-                    ),
-                    _buildStatCard(
-                      title: 'Calories',
-                      value: _currentCaloriesBurned.toStringAsFixed(0),
-                      unit: 'kcal',
-                      icon: Icons.local_fire_department,
-                      color: AppColors.secondary,
-                    ),
-                    _buildStatCard(
-                      title: 'Distance',
-                      value: _currentDistance.toStringAsFixed(2),
-                      unit: 'km',
-                      icon: Icons.straighten,
-                      color: AppColors.accent,
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Heart rate trend
-              if (_heartRateHistory.isNotEmpty && _isSessionActive) ...[
-                const Text(
-                  'Heart Rate Trend',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                SizedBox(
-                  height: 80,
-                  child: Row(
-                    children: List.generate(
-                      _heartRateHistory.length,
-                      (i) => Expanded(
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 1),
-                          height:
-                              _heartRateHistory[i] /
-                              2, // Scale for visualization
-                          decoration: BoxDecoration(
-                            color: _getHeartRateColor(_heartRateHistory[i]),
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(2),
+                    child: Opacity(
+                      opacity: _atNotificationController.value,
+                      child: Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
                             ),
-                          ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.notifications_active,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Anaerobic Threshold Reached!',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'A.T is reached at ${_formatDuration(_atReachedTimeSeconds! ~/ 60, _atReachedTimeSeconds! % 60)}',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Now Target Speed is ${_atTargetSpeed?.toStringAsFixed(1)} km/h',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ),
+                  );
+                },
+              ),
+
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Status indicator
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            _isSessionActive
+                                ? AppColors.secondary.withOpacity(0.1)
+                                : Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(
+                          AppConstants.borderRadius,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.circle,
+                            size: 12,
+                            color:
+                                _isSessionActive
+                                    ? AppColors.secondary
+                                    : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isSessionActive
+                                ? 'Session in progress'
+                                : 'Ready to start',
+                            style: TextStyle(
+                              color:
+                                  _isSessionActive
+                                      ? AppColors.secondary
+                                      : Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          // Timer display
+                          Text(
+                            _formatDuration(
+                              _elapsedSeconds ~/ 60,
+                              _elapsedSeconds % 60,
+                            ),
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  _isSessionActive
+                                      ? AppColors.primary
+                                      : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Enhanced Data Display
+                    if (_isSessionActive) _buildEnhancedDataDisplay(),
+
+                    const SizedBox(height: 16),
+
+                    // Heart Rate Chart
+                    if (_isSessionActive) ...[
+                      const Text(
+                        'Heart Rate',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+
+                      Container(
+                        height: 220,
+                        margin: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(
+                            AppConstants.borderRadius,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child:
+                            _heartRateChartData.length < 2
+                                ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const CircularProgressIndicator(),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Collecting data...',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                                : Stack(
+                                  children: [
+                                    SfCartesianChart(
+                                      plotAreaBorderWidth: 0,
+                                      margin: EdgeInsets.zero,
+                                      primaryXAxis: NumericAxis(
+                                        title: AxisTitle(
+                                          text: 'Time (seconds)',
+                                          textStyle: const TextStyle(
+                                            color: AppColors.textLight,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        majorGridLines: const MajorGridLines(
+                                          width: 0.5,
+                                          color: Colors.grey,
+                                        ),
+                                        axisLine: const AxisLine(
+                                          width: 0.5,
+                                          color: Colors.grey,
+                                        ),
+                                        minimum:
+                                            max(
+                                              0,
+                                              _elapsedSeconds - 60,
+                                            ).toDouble(),
+                                        maximum: max(
+                                          60,
+                                          _elapsedSeconds.toDouble(),
+                                        ),
+                                        interval: 10,
+                                        labelStyle: const TextStyle(
+                                          color: AppColors.textLight,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      primaryYAxis: NumericAxis(
+                                        title: AxisTitle(
+                                          text: 'Heart Rate (bpm)',
+                                          textStyle: const TextStyle(
+                                            color: AppColors.textLight,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        minimum: 60,
+                                        maximum: 200,
+                                        interval: 20,
+                                        majorGridLines: const MajorGridLines(
+                                          width: 0.5,
+                                          color: Colors.grey,
+                                        ),
+                                        axisLine: const AxisLine(
+                                          width: 0.5,
+                                          color: Colors.grey,
+                                        ),
+                                        labelStyle: const TextStyle(
+                                          color: AppColors.textLight,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      annotations: _getChartAnnotations(),
+                                      tooltipBehavior: TooltipBehavior(
+                                        enable: true,
+                                      ),
+                                      zoomPanBehavior: ZoomPanBehavior(
+                                        enablePanning: true,
+                                        zoomMode: ZoomMode.x,
+                                      ),
+                                      series: <
+                                        CartesianSeries<HeartRateData, int>
+                                      >[
+                                        // Main heart rate line
+                                        FastLineSeries<HeartRateData, int>(
+                                          onRendererCreated: (
+                                            ChartSeriesController controller,
+                                          ) {
+                                            _chartSeriesController = controller;
+                                          },
+                                          dataSource: _heartRateChartData,
+                                          xValueMapper:
+                                              (HeartRateData data, _) =>
+                                                  data.timeInSeconds,
+                                          yValueMapper:
+                                              (HeartRateData data, _) =>
+                                                  data.heartRate,
+                                          color: Colors.red.shade400,
+                                          width: 3,
+                                          markerSettings: MarkerSettings(
+                                            isVisible: true,
+                                            height: 5,
+                                            width: 5,
+                                            shape: DataMarkerType.circle,
+                                            borderWidth: 0,
+                                            color: Colors.red.shade400,
+                                          ),
+                                          enableTooltip: true,
+                                          animationDuration: 0,
+                                          name: 'Heart Rate',
+                                        ),
+
+                                        // Area under the heart rate line with gradient
+                                        AreaSeries<HeartRateData, int>(
+                                          dataSource: _heartRateChartData,
+                                          xValueMapper:
+                                              (HeartRateData data, _) =>
+                                                  data.timeInSeconds,
+                                          yValueMapper:
+                                              (HeartRateData data, _) =>
+                                                  data.heartRate,
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.red.shade100.withOpacity(
+                                                0.1,
+                                              ),
+                                              Colors.red.shade400.withOpacity(
+                                                0.3,
+                                              ),
+                                            ],
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                          ),
+                                          borderColor: Colors.transparent,
+                                          animationDuration: 0,
+                                        ),
+                                      ],
+                                    ),
+
+                                    // AT Label
+                                    if (_anaerobicThresholdReached &&
+                                        _atReachedTimeSeconds != null)
+                                      Positioned(
+                                        top: 5,
+                                        right: 10,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary
+                                                .withOpacity(0.8),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Anaerobic Threshold',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                      ),
+                    ],
+
+                    // Action button
+                    const Spacer(),
+                    _isSessionActive
+                        ? AppButton(
+                          text: 'End Session',
+                          onPressed: _endSession,
+                          backgroundColor: Colors.red,
+                        )
+                        : AppButton(
+                          text: 'Start Session',
+                          onPressed: _startSession,
+                          icon: Icons.play_arrow,
+                        ),
+                  ],
                 ),
-
-                const SizedBox(height: 24),
-              ],
-
-              // Action button
-              _isSessionActive
-                  ? AppButton(
-                    text: 'End Session',
-                    onPressed: _endSession,
-                    backgroundColor: Colors.red,
-                  )
-                  : AppButton(text: 'Start Session', onPressed: _startSession),
-
-              const SizedBox(height: 16),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String unit,
-    required IconData icon,
-    required Color color,
-  }) {
+  Widget _buildEnhancedDataDisplay() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -482,40 +823,209 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textLight,
-                ),
+              _buildStatItem(
+                'Speed',
+                '${_currentSpeed.toStringAsFixed(1)} km/h',
+                Icons.speed,
+                Colors.blue,
+              ),
+              _buildStatItem(
+                'Heart Rate',
+                '${_currentHeartRate.toInt()} bpm',
+                Icons.favorite,
+                _getHeartRateColor(_currentHeartRate),
+              ),
+              _buildStatItem(
+                'Distance',
+                '${_currentDistance.toStringAsFixed(2)} km',
+                Icons.straighten,
+                Colors.green,
               ),
             ],
           ),
-          const Spacer(),
+          const SizedBox(height: 16),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
+              _buildStatItem(
+                'Calories',
+                '${_currentCaloriesBurned.toInt()} kcal',
+                Icons.local_fire_department,
+                Colors.orange,
               ),
-              const SizedBox(width: 4),
-              Text(
-                unit,
-                style: TextStyle(fontSize: 14, color: color.withOpacity(0.7)),
+              _buildStatItem(
+                'Duration',
+                _formatDuration(_elapsedSeconds ~/ 60, _elapsedSeconds % 60),
+                Icons.timer,
+                Colors.indigo,
               ),
+              _buildZoneIndicator(),
             ],
+          ),
+
+          // Anaerobic Threshold Notification
+          if (_anaerobicThresholdReached && _atReachedTimeSeconds != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                border: Border.all(color: AppColors.primary, width: 1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.notifications_active,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Anaerobic Threshold Reached!',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'At ${_formatDuration(_atReachedTimeSeconds! ~/ 60, _atReachedTimeSeconds! % 60)}. Optimal training zone detected.',
+                    style: TextStyle(color: Colors.grey.shade800),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.favorite,
+                            color: Colors.red,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'HR: ${_atHeartRate.toInt()} bpm',
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.speed, color: Colors.blue, size: 18),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Speed: ${_atSpeed.toStringAsFixed(1)} km/h',
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  if (_atTargetSpeed != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.arrow_downward,
+                          color: Colors.green,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Target Speed: ${_atTargetSpeed!.toStringAsFixed(1)} km/h',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildZoneIndicator() {
+    // Calculate the heart rate zone
+    String zone;
+    Color zoneColor;
+
+    double maxHR = 220 - 30; // Assuming 30 years old user for demo
+    double hrPercentage = _currentHeartRate / maxHR * 100;
+
+    if (hrPercentage < 60) {
+      zone = 'Easy';
+      zoneColor = Colors.green;
+    } else if (hrPercentage < 70) {
+      zone = 'Fat Burn';
+      zoneColor = Colors.blue;
+    } else if (hrPercentage < 80) {
+      zone = 'Aerobic';
+      zoneColor = Colors.orange;
+    } else if (hrPercentage < 90) {
+      zone = 'Anaerobic';
+      zoneColor = Colors.deepOrange;
+    } else {
+      zone = 'Max';
+      zoneColor = Colors.red;
+    }
+
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.25,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: zoneColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              zone,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${hrPercentage.toInt()}% MHR',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'HR Zone',
+            style: TextStyle(fontSize: 14, color: AppColors.textLight),
           ),
         ],
       ),
@@ -523,13 +1033,149 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen> {
   }
 
   Color _getHeartRateColor(double heartRate) {
-    if (heartRate < 100) {
+    // Calculate the heart rate zone
+    double maxHR = 220 - 30; // Assuming 30 years old user for demo
+    double hrPercentage = heartRate / maxHR * 100;
+
+    if (hrPercentage < 60) {
       return Colors.green;
-    } else if (heartRate < 140) {
+    } else if (hrPercentage < 70) {
+      return Colors.blue;
+    } else if (hrPercentage < 80) {
       return Colors.orange;
+    } else if (hrPercentage < 90) {
+      return Colors.deepOrange;
     } else {
       return Colors.red;
     }
+  }
+
+  Widget _buildStatItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.25,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, color: AppColors.textLight),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Update the _updateDataPoint method to capture AT values
+  void _updateDataPoint(ExerciseDataPoint data) {
+    if (!mounted) return;
+
+    setState(() {
+      // Update current values
+      _currentSpeed = data.speed;
+      _currentHeartRate = data.heartRate;
+      _currentCaloriesBurned += data.calories;
+      _elapsedSeconds += 1;
+
+      // Calculate distance increment based on speed (km/h) and time (1 second)
+      // Convert km/h to km/s and then multiply by time
+      _currentDistance +=
+          (_currentSpeed / 3600); // Convert km/h to km/s then multiply by 1s
+
+      // Update history data for charts (keep last 60 entries)
+      _speedHistory.add(_currentSpeed);
+      _heartRateHistory.add(_currentHeartRate);
+
+      // Build heart rate spot for fl_chart
+      _heartRateChartData.add(
+        HeartRateData(
+          _elapsedSeconds,
+          _currentHeartRate,
+          isATPoint:
+              _anaerobicThresholdReached &&
+              _atReachedTimeSeconds != null &&
+              _elapsedSeconds == _atReachedTimeSeconds!,
+        ),
+      );
+
+      if (_speedHistory.length > 60) {
+        _speedHistory.removeAt(0);
+      }
+      if (_heartRateHistory.length > 60) {
+        _heartRateHistory.removeAt(0);
+      }
+      if (_heartRateChartData.length > 60) {
+        _heartRateChartData.removeAt(0);
+      }
+
+      // Check for anaerobic threshold
+      if (!_anaerobicThresholdReached &&
+          _currentHeartRate > 160 &&
+          _elapsedSeconds > 45) {
+        _anaerobicThresholdReached = true;
+        _atReachedTimeSeconds = _elapsedSeconds;
+        _atSpeed = _currentSpeed; // Capture speed at AT
+        _atHeartRate = _currentHeartRate; // Capture heart rate at AT
+        _atTargetSpeed = max(
+          _currentSpeed - 1.0,
+          3.0,
+        ); // Target slightly lower speed
+        _isShowingATMessage = true;
+        _atNotificationController.forward(from: 0.0);
+
+        // Auto-dismiss notification after 8 seconds
+        Future.delayed(const Duration(seconds: 8), () {
+          if (mounted) {
+            setState(() {
+              _isShowingATMessage = false;
+            });
+          }
+        });
+      }
+    });
+  }
+
+  List<CartesianChartAnnotation> _getChartAnnotations() {
+    if (_anaerobicThresholdReached && _atReachedTimeSeconds != null) {
+      return [
+        CartesianChartAnnotation(
+          coordinateUnit: CoordinateUnit.point,
+          x: _atReachedTimeSeconds!.toDouble(),
+          y: _atHeartRate,
+          widget: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'AT',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+    return [];
   }
 }
 

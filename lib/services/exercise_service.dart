@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/material.dart';
 
 import '../models/user_model.dart';
 
@@ -21,6 +22,24 @@ class ExerciseService {
 
   // Timer for simulating data points
   Timer? _dataTimer;
+
+  // Simulation parameters - private fields for simulation state
+  bool _isSimulating = false;
+  int _elapsedSeconds = 0;
+  double _currentSpeed = 3.0;
+  double _currentHeartRate = 80.0;
+  double _currentIncline = 0.0;
+  double _calorieRate = 0.15; // calories per second
+
+  // AT simulation parameters
+  final int _simulatedATPoint = 60; // AT kicks in around 60 seconds
+  bool _isATDetected = false;
+  double _targetSpeedAfterAT = 0.0;
+
+  // Singleton pattern
+  static final ExerciseService _instance = ExerciseService._internal();
+  factory ExerciseService() => _instance;
+  ExerciseService._internal();
 
   // Get user exercise history from Firestore
   Future<List<ExerciseSession>> getUserExerciseHistory() async {
@@ -296,83 +315,171 @@ class ExerciseService {
 
   // Start collecting data
   void startDataCollection() {
-    // For now, we'll simulate data since we don't have a real Raspberry Pi
-    _simulateDataPoints();
+    // Reset simulation parameters
+    _isSimulating = true;
+    _elapsedSeconds = 0;
+    _currentSpeed = 3.0;
+    _currentHeartRate = 80.0;
+    _currentIncline = 0.0;
+    _isATDetected = false;
+
+    // Start timer to simulate data
+    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!_isSimulating) {
+        timer.cancel();
+        return;
+      }
+
+      _simulateDataPoint();
+    });
   }
 
   // Stop collecting data
   void stopDataCollection() {
+    _isSimulating = false;
     _dataTimer?.cancel();
     _dataTimer = null;
   }
 
   // Check if device is connected
   Future<bool> isDeviceConnected() async {
-    // Simulate connection
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Always return true for simulation
     return true;
   }
 
-  // Simulate exercise data points for testing
-  void _simulateDataPoints() {
-    if (_dataTimer != null) return;
+  // Simulate a data point
+  void _simulateDataPoint() {
+    _elapsedSeconds++;
 
-    final random = Random();
-    double speed = 5.0 + random.nextDouble() * 2.0;
-    double heartRate = 80.0 + random.nextDouble() * 10.0;
-    int tick = 0;
+    // Simulate heart rate
+    // Initially increase, then show a deflection pattern around AT point
+    if (_elapsedSeconds < _simulatedATPoint) {
+      // Before AT - heart rate increases with effort
+      _currentHeartRate = _simulateHeartRateBeforeAT();
+    } else if (_elapsedSeconds == _simulatedATPoint) {
+      // At AT - slight deflection occurs
+      _currentHeartRate = _currentHeartRate - 2;
+      _isATDetected = true;
 
-    _dataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      tick++;
+      // Calculate target speed (lower than current for recovery)
+      _targetSpeedAfterAT = max(_currentSpeed * 0.8, 2.5);
+    } else {
+      // After AT - heart rate stabilizes or increases more slowly
+      _currentHeartRate = _simulateHeartRateAfterAT();
+    }
 
-      // Gradually increase values over time to simulate increased exercise intensity
-      final exerciseTime = tick / 60.0; // Exercise time in minutes
+    // Simulate speed - gradually increase until AT, then decrease
+    if (!_isATDetected) {
+      // Before AT - speed increases gradually
+      _currentSpeed = _simulateSpeedBeforeAT();
+    } else {
+      // After AT - speed decreases gradually toward target
+      _currentSpeed = _simulateSpeedAfterAT();
+    }
 
-      // Simulate natural variations
-      speed += (random.nextDouble() - 0.5) * 0.3;
-      if (speed < 4.0) speed = 4.0;
-      if (speed > 12.0) speed = 12.0;
+    // Simulate incline - varies slightly
+    _currentIncline = _simulateIncline();
 
-      // Heart rate increases with exercise time
-      heartRate =
-          80.0 + (exerciseTime * 5.0) + (random.nextDouble() - 0.5) * 5.0;
-      if (heartRate < 80.0) heartRate = 80.0;
-      if (heartRate > 180.0) heartRate = 180.0;
+    // Create data point
+    final dataPoint = ExerciseDataPoint(
+      timestamp: DateTime.now(),
+      heartRate: _currentHeartRate,
+      speed: _currentSpeed,
+      incline: _currentIncline,
+      vo2: _simulateVO2(),
+      calories:
+          _calorieRate *
+          _currentHeartRate /
+          100, // Calories proportional to heart rate
+    );
 
-      // Calculate incline - occasionally changing
-      double? incline;
-      if (tick % 30 == 0) {
-        // Change incline every 30 seconds
-        incline = random.nextDouble() * 5.0;
-      } else if (tick % 30 < 15) {
-        incline = 2.0;
-      } else {
-        incline = 1.0;
-      }
+    // Send to stream
+    _dataStreamController.add(dataPoint);
+  }
 
-      // Calculate calories based on heart rate and speed
-      // Rough estimate: calories per second = (0.1 * heart rate + 0.2 * speed)
-      final calories = (0.1 * heartRate + 0.2 * speed) / 60.0;
+  // Heart rate simulation before AT
+  double _simulateHeartRateBeforeAT() {
+    // Increase heart rate more aggressively at first, then slow down as approaching AT
+    double baseIncrease = 1.5;
 
-      // Calculate VO2 based on heart rate (simple estimation)
-      final vo2 = (heartRate - 60) * 0.2;
+    // Slow down the increase as we approach AT
+    if (_elapsedSeconds > 40) {
+      baseIncrease = 0.8;
+    }
 
-      // Calculate distance based on speed
-      final distance = speed * (tick / 3600); // km based on km/h and seconds
+    // Add some random variation
+    double randomVariation = Random().nextDouble() * 2 - 1; // -1 to 1
 
-      // Create data point
-      final dataPoint = ExerciseDataPoint(
-        timestamp: DateTime.now(),
-        heartRate: heartRate,
-        speed: speed,
-        calories: calories,
-        incline: incline,
-        vo2: vo2,
-      );
+    // Cap heart rate to realistic values
+    return min(185, _currentHeartRate + baseIncrease + randomVariation);
+  }
 
-      // Add to stream
-      _dataStreamController.add(dataPoint);
-    });
+  // Heart rate simulation after AT
+  double _simulateHeartRateAfterAT() {
+    // After AT, heart rate increases more slowly or stabilizes
+    double baseChange = 0.3;
+
+    // Add more prominent random variations after AT
+    double randomVariation = Random().nextDouble() * 3 - 1.5; // -1.5 to 1.5
+
+    // Cap heart rate to realistic values
+    return min(190, max(140, _currentHeartRate + baseChange + randomVariation));
+  }
+
+  // Speed simulation before AT
+  double _simulateSpeedBeforeAT() {
+    // Gradually increase speed before AT
+    double baseIncrease = 0.1;
+
+    // Add some random variation
+    double randomVariation = Random().nextDouble() * 0.2 - 0.1; // -0.1 to 0.1
+
+    // Cap speed to realistic values
+    return min(12.0, _currentSpeed + baseIncrease + randomVariation);
+  }
+
+  // Speed simulation after AT
+  double _simulateSpeedAfterAT() {
+    // After AT, gradually decrease speed toward target
+    double speedDiff = _currentSpeed - _targetSpeedAfterAT;
+    double adjustment =
+        speedDiff > 0
+            ? -0.2
+            : 0.1; // Decrease if above target, increase if below
+
+    // Add some random variation
+    double randomVariation = Random().nextDouble() * 0.2 - 0.1; // -0.1 to 0.1
+
+    // Ensure we don't go below minimum speed
+    return max(2.0, _currentSpeed + adjustment + randomVariation);
+  }
+
+  // Incline simulation
+  double _simulateIncline() {
+    // Simulate small changes in incline
+    double baseChange = 0;
+    if (_elapsedSeconds % 30 < 15) {
+      baseChange = 0.1; // Increase for 15 seconds
+    } else {
+      baseChange = -0.1; // Decrease for 15 seconds
+    }
+
+    // Add some random variation
+    double randomVariation = Random().nextDouble() * 0.2 - 0.1; // -0.1 to 0.1
+
+    // Ensure incline stays within realistic range
+    return min(15.0, max(0.0, _currentIncline + baseChange + randomVariation));
+  }
+
+  // VO2 simulation based on heart rate and speed
+  double _simulateVO2() {
+    // Simple VO2 estimation based on heart rate and speed
+    double baseVO2 = 10 + (_currentHeartRate - 60) * 0.2 + _currentSpeed * 1.5;
+
+    // Add some random variation
+    double randomVariation = Random().nextDouble() * 2 - 1; // -1 to 1
+
+    return max(10.0, baseVO2 + randomVariation);
   }
 
   // Save an exercise session to Firestore
@@ -542,6 +649,82 @@ class ExerciseService {
     }
 
     return streak;
+  }
+
+  // Save detailed exercise session with AT data
+  Future<void> saveSessionWithATData(SessionDetailData sessionData) async {
+    try {
+      User? user = _auth.currentUser;
+
+      if (user != null) {
+        // Save the session data to Firestore
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('sessionDetails')
+            .doc(sessionData.id)
+            .set(sessionData.toMap());
+      } else {
+        throw Exception('User not authenticated');
+      }
+    } catch (e) {
+      print('Error saving session with AT data: $e');
+      throw Exception('Failed to save exercise session: $e');
+    }
+  }
+
+  // Retrieve all detailed sessions with AT data
+  Future<List<SessionDetailData>> getSessionsWithATData() async {
+    try {
+      User? user = _auth.currentUser;
+
+      if (user != null) {
+        QuerySnapshot querySnapshot =
+            await _firestore
+                .collection('users')
+                .doc(user.uid)
+                .collection('sessionDetails')
+                .orderBy('date', descending: true)
+                .get();
+
+        return querySnapshot.docs
+            .map(
+              (doc) =>
+                  SessionDetailData.fromMap(doc.data() as Map<String, dynamic>),
+            )
+            .toList();
+      } else {
+        throw Exception('User not authenticated');
+      }
+    } catch (e) {
+      print('Error retrieving sessions with AT data: $e');
+      return [];
+    }
+  }
+
+  // Get a specific session by ID
+  Future<SessionDetailData?> getSessionDetailById(String sessionId) async {
+    try {
+      User? user = _auth.currentUser;
+
+      if (user != null) {
+        DocumentSnapshot doc =
+            await _firestore
+                .collection('users')
+                .doc(user.uid)
+                .collection('sessionDetails')
+                .doc(sessionId)
+                .get();
+
+        if (doc.exists) {
+          return SessionDetailData.fromMap(doc.data() as Map<String, dynamic>);
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error retrieving session detail: $e');
+      return null;
+    }
   }
 }
 

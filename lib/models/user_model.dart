@@ -257,3 +257,102 @@ class ExerciseDataPoint {
     );
   }
 }
+
+// Class to represent a complete exercise session with AT data
+class SessionDetailData {
+  final String id;
+  final DateTime date;
+  final int durationMinutes;
+  final double totalDistance;
+  final int totalCalories;
+  final double averageHeartRate;
+  final double maxHeartRate;
+  final double averageSpeed;
+  final double maxSpeed;
+  final bool atReached;
+  final int? atReachedTimeSeconds;
+  final double? atHeartRate;
+  final double? atSpeed;
+  final double? atTargetSpeed;
+  final List<HeartRatePoint> heartRateData;
+
+  SessionDetailData({
+    required this.id,
+    required this.date,
+    required this.durationMinutes,
+    required this.totalDistance,
+    required this.totalCalories,
+    required this.averageHeartRate,
+    required this.maxHeartRate,
+    required this.averageSpeed,
+    required this.maxSpeed,
+    required this.atReached,
+    this.atReachedTimeSeconds,
+    this.atHeartRate,
+    this.atSpeed,
+    this.atTargetSpeed,
+    required this.heartRateData,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'date': date.millisecondsSinceEpoch,
+      'durationMinutes': durationMinutes,
+      'totalDistance': totalDistance,
+      'totalCalories': totalCalories,
+      'averageHeartRate': averageHeartRate,
+      'maxHeartRate': maxHeartRate,
+      'averageSpeed': averageSpeed,
+      'maxSpeed': maxSpeed,
+      'atReached': atReached,
+      'atReachedTimeSeconds': atReachedTimeSeconds,
+      'atHeartRate': atHeartRate,
+      'atSpeed': atSpeed,
+      'atTargetSpeed': atTargetSpeed,
+      'heartRateData': heartRateData.map((point) => point.toMap()).toList(),
+    };
+  }
+
+  factory SessionDetailData.fromMap(Map<String, dynamic> map) {
+    return SessionDetailData(
+      id: map['id'],
+      date: DateTime.fromMillisecondsSinceEpoch(map['date']),
+      durationMinutes: map['durationMinutes'],
+      totalDistance: map['totalDistance'],
+      totalCalories: map['totalCalories'],
+      averageHeartRate: map['averageHeartRate'],
+      maxHeartRate: map['maxHeartRate'],
+      averageSpeed: map['averageSpeed'],
+      maxSpeed: map['maxSpeed'],
+      atReached: map['atReached'],
+      atReachedTimeSeconds: map['atReachedTimeSeconds'],
+      atHeartRate: map['atHeartRate'],
+      atSpeed: map['atSpeed'],
+      atTargetSpeed: map['atTargetSpeed'],
+      heartRateData:
+          (map['heartRateData'] as List)
+              .map((point) => HeartRatePoint.fromMap(point))
+              .toList(),
+    );
+  }
+}
+
+// Class for heart rate data points
+class HeartRatePoint {
+  final int timeInSeconds;
+  final double heartRate;
+
+  HeartRatePoint({required this.timeInSeconds, required this.heartRate});
+
+  Map<String, dynamic> toMap() {
+    return {'timeInSeconds': timeInSeconds, 'heartRate': heartRate};
+  }
+
+  factory HeartRatePoint.fromMap(Map<String, dynamic> map) {
+    return HeartRatePoint(
+      timeInSeconds: map['timeInSeconds'],
+      heartRate: map['heartRate'],
+    );
+  }
+}

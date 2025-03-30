@@ -514,7 +514,7 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'Previous Sessions',
               icon: Icons.history,
               color: Colors.purple,
-              onTap: () => Navigator.pushNamed(context, '/history'),
+              onTap: () => Navigator.pushNamed(context, '/previous_sessions'),
             ),
           ],
         ),

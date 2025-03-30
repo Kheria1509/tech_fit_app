@@ -17,6 +17,8 @@ import 'screens/stats_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/exercise_screen.dart';
 import 'screens/device_tracking_screen.dart';
+import 'screens/previous_sessions_screen.dart';
+import 'screens/session_detail_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,6 +76,7 @@ class TechFitApp extends StatelessWidget {
           '/profile': (context) => const ProfileScreen(),
           '/exercise': (context) => const ExerciseScreen(),
           '/device_tracking': (context) => const DeviceTrackingScreen(),
+          '/previous_sessions': (context) => const PreviousSessionsScreen(),
         },
       ),
     );
