@@ -4,13 +4,22 @@ import '../main.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:math';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
+  final String userGender;
+  final DateTime? userBirthday;
+  final double userHeight;
+  final double userWeight;
 
   const DashboardScreen({
     super.key,
     required this.userName,
+    required this.userGender,
+    this.userBirthday,
+    required this.userHeight,
+    required this.userWeight,
   });
 
   @override
@@ -125,10 +134,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   double _random() {
     return (DateTime.now().microsecondsSinceEpoch % 100) / 100;
-  }
-
-  double _normalizedSin(double value) {
-    return (sin(value) + 1) / 2;
   }
 
   late ThemeData theme;
@@ -503,7 +508,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     theme = Theme.of(context);
-    final isDarkMode = context.watch<ThemeProvider>().isDarkMode;
     final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -547,11 +551,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   context, themeProvider.isDarkMode),
                         ),
                         SizedBox(width: defaultPadding),
-                        CircleAvatar(
-                          backgroundColor: theme.primaryColor.withOpacity(0.1),
-                          child: Icon(
-                            Icons.person_outline,
-                            color: theme.primaryColor,
+                        GestureDetector(
+                          onTap: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfileScreen(
+                                  userName: widget.userName,
+                                  userGender: widget.userGender,
+                                  userBirthday: widget.userBirthday,
+                                  userHeight: widget.userHeight,
+                                  userWeight: widget.userWeight,
+                                ),
+                              ),
+                            );
+                            
+                            if (result != null && mounted) {
+                              // Update the navigation state with new user info
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => DashboardScreen(
+                                    userName: result['userName'],
+                                    userGender: result['userGender'],
+                                    userBirthday: result['userBirthday'],
+                                    userHeight: result['userHeight'],
+                                    userWeight: result['userWeight'],
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                          child: CircleAvatar(
+                            backgroundColor: theme.primaryColor.withOpacity(0.1),
+                            child: Icon(
+                              Icons.person_outline,
+                              color: theme.primaryColor,
+                            ),
                           ),
                         ),
                       ],

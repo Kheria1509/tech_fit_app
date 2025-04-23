@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import '../main.dart';
 
 class WelcomeScreen extends StatefulWidget {
   final String userName;
+  final String userGender;
+  final DateTime? userBirthday;
+  final double userHeight;
+  final double userWeight;
 
   const WelcomeScreen({
     super.key,
     required this.userName,
+    required this.userGender,
+    this.userBirthday,
+    required this.userHeight,
+    required this.userWeight,
   });
 
   @override
@@ -207,7 +213,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
-    final isDarkMode = context.watch<ThemeProvider>().isDarkMode;
 
     return Scaffold(
       body: SafeArea(
@@ -275,10 +280,16 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () {
-                            Navigator.pushNamed(
+                            Navigator.pushReplacementNamed(
                               context,
                               '/dashboard',
-                              arguments: widget.userName,
+                              arguments: {
+                                'userName': widget.userName,
+                                'userGender': widget.userGender,
+                                'userBirthday': widget.userBirthday,
+                                'userHeight': widget.userHeight,
+                                'userWeight': widget.userWeight,
+                              },
                             );
                           },
                           style: ElevatedButton.styleFrom(

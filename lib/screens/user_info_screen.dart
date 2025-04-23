@@ -419,6 +419,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     MaterialPageRoute(
                       builder: (context) => WelcomeScreen(
                         userName: widget.userName,
+                        userGender: _selectedGender,
+                        userBirthday: _selectedDate,
+                        userHeight: _height,
+                        userWeight: _weight,
                       ),
                     ),
                   );

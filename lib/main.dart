@@ -35,15 +35,19 @@ class MyApp extends StatelessWidget {
           title: 'Login App',
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
-          themeMode:
-              themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
           home: const CreateAccountScreen(),
           routes: {
-            '/dashboard': (context) => DashboardScreen(
-                  userName:
-                      ModalRoute.of(context)?.settings.arguments as String? ??
-                          '',
-                ),
+            '/dashboard': (context) {
+              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>;
+              return DashboardScreen(
+                userName: args['userName'] ?? '',
+                userGender: args['userGender'] ?? '',
+                userBirthday: args['userBirthday'],
+                userHeight: args['userHeight'] ?? 180.0,
+                userWeight: args['userWeight'] ?? 80.0,
+              );
+            },
           },
           debugShowCheckedModeBanner: false,
         );
