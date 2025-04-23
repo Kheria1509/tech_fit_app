@@ -31,7 +31,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     if (_formKey.currentState!.validate()) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => const UserInfoScreen(),
+          builder: (context) => UserInfoScreen(
+            userName: _nameController.text,
+          ),
         ),
       );
     } else {
@@ -41,20 +43,87 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
   }
 
+  Widget _buildThemeToggle(BuildContext context, bool isDarkMode) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF2C2C2C) : Colors.grey[200],
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleButton(
+            text: 'DAYMODE',
+            isSelected: !isDarkMode,
+            icon: Icons.wb_sunny_outlined,
+            onTap: () => context.read<ThemeProvider>().toggleTheme(),
+          ),
+          _buildToggleButton(
+            text: 'NIGHTMODE',
+            isSelected: isDarkMode,
+            icon: Icons.nightlight_round,
+            onTap: () => context.read<ThemeProvider>().toggleTheme(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton({
+    required String text,
+    required bool isSelected,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (text == 'DAYMODE' ? Colors.white : Colors.black)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected
+                  ? (text == 'DAYMODE' ? Colors.black : Colors.white)
+                  : Colors.grey,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isSelected
+                    ? (text == 'DAYMODE' ? Colors.black : Colors.white)
+                    : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        elevation: 0,
         actions: [
-          IconButton(
-            icon: Icon(
-              context.watch<ThemeProvider>().isDarkMode
-                  ? Icons.light_mode
-                  : Icons.dark_mode,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Consumer<ThemeProvider>(
+              builder: (context, themeProvider, _) =>
+                  _buildThemeToggle(context, themeProvider.isDarkMode),
             ),
-            onPressed: () {
-              context.read<ThemeProvider>().toggleTheme();
-            },
           ),
         ],
       ),

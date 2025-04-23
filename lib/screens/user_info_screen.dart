@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
+import 'welcome_screen.dart';
 
 class UserInfoScreen extends StatefulWidget {
-  const UserInfoScreen({super.key});
+  final String userName;
+
+  const UserInfoScreen({
+    super.key,
+    required this.userName,
+  });
 
   @override
   State<UserInfoScreen> createState() => _UserInfoScreenState();
@@ -409,7 +415,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  // Handle next step
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => WelcomeScreen(
+                        userName: widget.userName,
+                      ),
+                    ),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0E1B33),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/create_account_screen.dart';
+import 'screens/dashboard_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -37,6 +38,13 @@ class MyApp extends StatelessWidget {
           themeMode:
               themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
           home: const CreateAccountScreen(),
+          routes: {
+            '/dashboard': (context) => DashboardScreen(
+                  userName:
+                      ModalRoute.of(context)?.settings.arguments as String? ??
+                          '',
+                ),
+          },
           debugShowCheckedModeBanner: false,
         );
       },
