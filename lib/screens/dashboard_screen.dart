@@ -598,85 +598,109 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Training Card
                 Container(
                   width: double.infinity,
-                  height: screenSize.height * 0.25,
+                  height: screenSize.height * 0.2,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(borderRadius),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: const LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                       colors: [
-                        theme.primaryColor,
-                        Color.lerp(theme.primaryColor, Colors.black, 0.1) ??
-                            theme.primaryColor.withOpacity(0.8),
+                        Color(0xFF6C63FF),
+                        Color(0xFF8B85FF),
                       ],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.primaryColor.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(borderRadius),
+                    borderRadius: BorderRadius.circular(24),
                     child: Stack(
                       children: [
+                        // Background decoration
                         Positioned(
-                          top: defaultPadding * 1.5,
-                          left: defaultPadding * 1.5,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                "Let's Start Training",
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              SizedBox(height: defaultPadding * 1.5),
-                              ElevatedButton(
-                                onPressed: () {
-                                  // Handle start training
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: theme.primaryColor,
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: defaultPadding * 2,
-                                    vertical: defaultPadding,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(borderRadius - 4),
-                                  ),
-                                  elevation: 3,
-                                ),
-                                child: const Text(
-                                  'Start',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Decorative element
-                        Positioned(
-                          bottom: -20,
                           right: -20,
+                          bottom: -20,
                           child: Container(
-                            width: 150,
-                            height: 150,
+                            width: 100,
+                            height: 100,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.white.withOpacity(0.1),
                             ),
                           ),
+                        ),
+                        // Content
+                        Row(
+                          children: [
+                            // Left side - Running Person
+                            Expanded(
+                              flex: 1,
+                              child: TweenAnimationBuilder(
+                                duration: const Duration(milliseconds: 1500),
+                                tween: Tween<double>(begin: -0.1, end: 0.1),
+                                builder: (context, double value, child) {
+                                  return Transform.translate(
+                                    offset: Offset(0, value * 8), // Bounce effect
+                                    child: Transform.scale(
+                                      scale: 1.0 + (value * 0.05), // Slight scaling
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 20),
+                                        child: Image.asset(
+                                          'assets/images/running.png',
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            // Right side - Text and Button
+                            Expanded(
+                              flex: 1,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 24.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Let's Start\nTraining",
+                                      style: TextStyle(
+                                        fontSize: 28,
+                                        height: 1.2,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        // Handle start training
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.white,
+                                        foregroundColor: Color(0xFF6C63FF),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 32,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(50),
+                                        ),
+                                        elevation: 0,
+                                      ),
+                                      child: const Text(
+                                        'Start',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
