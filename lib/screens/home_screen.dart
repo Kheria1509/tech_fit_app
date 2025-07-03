@@ -1,51 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:percent_indicator/circular_percent_indicator.dart';
-import 'package:percent_indicator/linear_percent_indicator.dart';
-
-import '../utils/app_constants.dart';
-import '../models/user_model.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../providers/dashboard_provider.dart';
 import '../providers/user_provider.dart';
-import '../services/exercise_service.dart';
-import '../widgets/app_button.dart';
+import '../models/dashboard_models.dart';
+import '../models/user_model.dart';
+import '../theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isLoading = false;
-  final ExerciseService _exerciseService = ExerciseService();
-
   @override
   void initState() {
     super.initState();
-    // Load latest user data when screen is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshUserData();
+      context.read<DashboardProvider>().initializeDashboard();
     });
-  }
-
-  Future<void> _refreshUserData() async {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      await userProvider.refreshUserData();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error refreshing data: ${e.toString()}')),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
   @override
@@ -53,354 +28,361 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refreshUserData,
-          child:
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildContent(),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Consumer<DashboardProvider>(
+              builder: (context, provider, child) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(provider),
+                    const SizedBox(height: 24),
+                    _buildStartWorkoutCard(),
+                    const SizedBox(height: 24),
+                    _buildProgressSection(),
+                    const SizedBox(height: 24),
+                    _buildQuickAccess(),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildContent() {
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, child) {
-        final UserModel? user = userProvider.user;
-        if (user == null) {
-          return const Center(child: Text('User data not available'));
-        }
-
-        return SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header section with greeting
-              _buildHeader(user),
-
-              const SizedBox(height: 24),
-
-              // Progress Cards
-              _buildProgressSection(user),
-
-              const SizedBox(height: 24),
-
-              // Today's workout section
-              _buildWorkoutSection(user),
-
-              const SizedBox(height: 24),
-
-              // Exercise Tracking
-              _buildTrackingSection(user),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildHeader(UserModel user) {
+  Widget _buildHeader(DashboardProvider provider) {
     final greeting = _getGreeting();
-    final firstName = user.name.split(' ').first;
+    final userProvider = Provider.of<UserProvider>(context);
+    final UserModel? user = userProvider.user;
+    final String firstName = user?.name.split(' ').first ?? 'User';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$greeting,',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textLight,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  firstName,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ],
+            Text(
+              greeting,
+              style: const TextStyle(
+                fontSize: 20,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            GestureDetector(
-              onTap: () {
-                Navigator.pushNamed(context, '/profile');
-              },
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.grey.shade200,
-                  image:
-                      user.profileImageUrl != null &&
-                              user.profileImageUrl!.isNotEmpty
-                          ? DecorationImage(
-                            image: NetworkImage(user.profileImageUrl!),
-                            fit: BoxFit.cover,
-                          )
-                          : null,
-                ),
+            Text(
+              firstName,
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              debugPrint('Profile icon tapped'); // Debug print
+              Navigator.of(context).pushNamed('/profile');
+            },
+            borderRadius: BorderRadius.circular(30),
+            child: Ink(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey[200],
+              ),
+              child: CircleAvatar(
+                radius: 30,
+                backgroundColor: Colors.transparent,
+                backgroundImage:
+                    user?.profileImageUrl != null
+                        ? NetworkImage(user!.profileImageUrl!)
+                        : null,
                 child:
-                    user.profileImageUrl == null ||
-                            user.profileImageUrl!.isEmpty
-                        ? Icon(Icons.person, color: Colors.grey.shade400)
+                    user?.profileImageUrl == null
+                        ? const Icon(Icons.person, size: 35, color: Colors.grey)
                         : null,
               ),
             ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        const Text('Dashboard', style: AppTextStyles.heading2),
-      ],
-    );
-  }
-
-  Widget _buildProgressSection(UserModel user) {
-    // Calculate weight loss progress
-    final initialWeight = user.weight;
-    final targetWeight = user.targetWeight;
-    final weightDifference = initialWeight - targetWeight;
-
-    // Mock data for exercise progress - replace with real data from user model in production
-    final exerciseGoalMinutes = 150; // WHO recommended weekly exercise
-    final exerciseProgress =
-        user.sessions == null || user.sessions!.isEmpty
-            ? 0.0
-            : user.sessions!
-                .map((session) => session.duration.inMinutes)
-                .reduce((a, b) => a + b)
-                .toDouble();
-
-    final exerciseProgressPercent = exerciseProgress / exerciseGoalMinutes;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Your Progress', style: AppTextStyles.heading3),
-
-        const SizedBox(height: 16),
-
-        Row(
-          children: [
-            // Weight progress card
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(
-                    AppConstants.cardBorderRadius,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Weight',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: CircularPercentIndicator(
-                        radius: 60.0,
-                        lineWidth: 10.0,
-                        percent:
-                            weightDifference <= 0
-                                ? 0.0
-                                : (initialWeight - user.weight) /
-                                    weightDifference,
-                        center: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '${user.weight.toStringAsFixed(1)}',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Text(
-                              'kg',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.textLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                        progressColor: AppColors.primary,
-                        backgroundColor: Colors.grey.shade200,
-                        circularStrokeCap: CircularStrokeCap.round,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Target: ${user.targetWeight.toStringAsFixed(1)} kg',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 16),
-
-            // Exercise progress card
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(
-                    AppConstants.cardBorderRadius,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Exercise',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: CircularPercentIndicator(
-                        radius: 60.0,
-                        lineWidth: 10.0,
-                        percent: exerciseProgressPercent.clamp(0.0, 1.0),
-                        center: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '${exerciseProgress.toInt()}',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Text(
-                              'min',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.textLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                        progressColor: AppColors.secondary,
-                        backgroundColor: Colors.grey.shade200,
-                        circularStrokeCap: CircularStrokeCap.round,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Goal: 150 min/week',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildWorkoutSection(UserModel user) {
-    // Calculate remaining calories to burn based on user's goal
-    // This is mock data - replace with real algorithm in production
-    final dailyCalorieBurn = 500; // Example goal
-    final caloriesBurnt =
-        user.sessions == null || user.sessions!.isEmpty
-            ? 0.0
-            : user.sessions!.last.caloriesBurned.toDouble();
-    final remainingCalories = dailyCalorieBurn - caloriesBurnt;
-    final progressPercent = (caloriesBurnt / dailyCalorieBurn).clamp(0.0, 1.0);
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning,';
+    if (hour < 17) return 'Good Afternoon,';
+    return 'Good Evening,';
+  }
 
+  Widget _buildStartWorkoutCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, Color(0xFF2D63D8)],
-        ),
-        borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Today\'s Goal',
+              const Text(
+                'Start Workout',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
                   color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              Icon(Icons.fitness_center, color: Colors.white),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () {},
+              ),
             ],
           ),
-
           const SizedBox(height: 20),
-
-          LinearPercentIndicator(
-            padding: EdgeInsets.zero,
-            lineHeight: 8.0,
-            percent: progressPercent,
-            progressColor: Colors.white,
-            backgroundColor: Colors.white.withOpacity(0.3),
-            barRadius: const Radius.circular(4),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/device_tracking');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Text(
+              'Start',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildProgressSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your Progress',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+
+        // Workout Statistics Card
+        _buildProgressCard(
+          'Workout Stats',
+          '4/5',
+          'workouts',
+          'Weekly Goal: 5 workouts',
+          Icons.fitness_center,
+          Colors.blue,
+          details: [
+            {'label': 'Duration this week', 'value': '180 min'},
+            {'label': 'Avg. Intensity', 'value': 'Moderate'},
+            {'label': 'Calories burned', 'value': '2,500 kcal'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Heart Rate Metrics Card
+        _buildProgressCard(
+          'Heart Rate',
+          '72',
+          'bpm',
+          'Resting Heart Rate',
+          Icons.favorite,
+          Colors.red,
+          details: [
+            {'label': 'Time in Peak Zone', 'value': '25 min'},
+            {'label': 'Recovery Rate', 'value': 'Good'},
+            {'label': 'Max HR Today', 'value': '165 bpm'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Performance Metrics Card
+        _buildProgressCard(
+          'Performance',
+          '85',
+          'points',
+          'Fitness Score',
+          Icons.speed,
+          Colors.orange,
+          details: [
+            {'label': 'Personal Best', 'value': '5km Run'},
+            {'label': 'Endurance Level', 'value': 'Advanced'},
+            {'label': 'Recovery Status', 'value': 'Optimal'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Body Metrics Card
+        _buildProgressCard(
+          'Body Metrics',
+          '75.0',
+          'kg',
+          'Target: 72.0 kg',
+          Icons.monitor_weight_outlined,
+          Colors.purple,
+          details: [
+            {'label': 'BMI', 'value': '23.5'},
+            {'label': 'Body Fat', 'value': '18%'},
+            {'label': 'Muscle Mass', 'value': '35.2 kg'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Achievement Progress Card
+        _buildProgressCard(
+          'Achievements',
+          '12',
+          'earned',
+          'Total: 30 badges',
+          Icons.emoji_events,
+          Colors.amber,
+          details: [
+            {'label': 'Current Streak', 'value': '8 days'},
+            {'label': 'Best Streak', 'value': '15 days'},
+            {'label': 'Monthly Goals', 'value': '3/5'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Fitness Level Card
+        _buildProgressCard(
+          'Fitness Level',
+          'Advanced',
+          'level',
+          'VO2 Max: 45.5',
+          Icons.trending_up,
+          Colors.green,
+          details: [
+            {'label': 'Fitness Age', 'value': '27 yrs'},
+            {'label': 'Strength Level', 'value': 'Intermediate'},
+            {'label': 'Overall Score', 'value': '8.5/10'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Recovery & Wellness Card
+        _buildProgressCard(
+          'Wellness',
+          '85',
+          '%',
+          'Recovery Score',
+          Icons.nightlight_round,
+          Colors.indigo,
+          details: [
+            {'label': 'Sleep Quality', 'value': 'Good'},
+            {'label': 'Stress Level', 'value': 'Low'},
+            {'label': 'Rest Days', 'value': '2/week'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Comparison Metrics Card
+        _buildProgressCard(
+          'Progress',
+          '+15',
+          '%',
+          'Monthly Improvement',
+          Icons.compare_arrows,
+          Colors.teal,
+          details: [
+            {'label': 'vs Last Week', 'value': '+5%'},
+            {'label': 'vs Last Month', 'value': '+15%'},
+            {'label': 'Goal Progress', 'value': '75%'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Workout Balance Card
+        _buildProgressCard(
+          'Training Mix',
+          '70',
+          '%',
+          'Balanced Score',
+          Icons.balance,
+          Colors.deepPurple,
+          details: [
+            {'label': 'Cardio', 'value': '40%'},
+            {'label': 'Strength', 'value': '35%'},
+            {'label': 'Flexibility', 'value': '25%'},
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Health Impact Card
+        _buildProgressCard(
+          'Health Impact',
+          '92',
+          '%',
+          'Wellness Score',
+          Icons.health_and_safety,
+          Colors.cyan,
+          details: [
+            {'label': 'Energy Level', 'value': 'High'},
+            {'label': 'Mood Score', 'value': '9/10'},
+            {'label': 'Recovery Rate', 'value': 'Excellent'},
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressCard(
+    String title,
+    String value,
+    String unit,
+    String target,
+    IconData icon,
+    Color color, {
+    List<Map<String, String>>? details,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -408,113 +390,116 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${caloriesBurnt.toInt()} kcal',
+                    value,
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
                     ),
                   ),
-                  const Text(
-                    'Burnt',
-                    style: TextStyle(fontSize: 14, color: Colors.white70),
+                  const SizedBox(height: 4),
+                  Text(
+                    unit,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                 ],
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${remainingCalories.toInt()} kcal',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Text(
-                    'Remaining',
-                    style: TextStyle(fontSize: 14, color: Colors.white70),
-                  ),
-                ],
+              Text(
+                target,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
-
-          const SizedBox(height: 20),
-
-          AppButton(
-            text: 'Start Workout',
-            onPressed: () {
-              Navigator.pushNamed(context, '/exercise');
-            },
-            backgroundColor: Colors.white,
-            textColor: AppColors.primary,
-          ),
+          if (details != null) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            ...details
+                .map(
+                  (detail) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          detail['label']!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          detail['value']!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildTrackingSection(UserModel user) {
+  Widget _buildQuickAccess() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Track Your Exercise', style: AppTextStyles.heading3),
+            const Text(
+              'Quick Access',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
             TextButton(
               onPressed: () {
                 Navigator.pushNamed(context, '/stats');
               },
-              child: const Text(
-                'View All',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Row(
+                children: [
+                  Text(
+                    'View Stats',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward, color: AppColors.primary),
+                ],
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 16),
-
         Row(
           children: [
-            _buildTrackingCard(
-              title: 'Connect Device',
-              icon: Icons.bluetooth,
-              color: AppColors.primary,
-              onTap: () => _connectRaspberryPi(),
+            Expanded(
+              child: _buildQuickAccessCard(
+                'Connect Device',
+                Icons.bluetooth,
+                onTap: () {
+                  Navigator.pushNamed(context, '/bluetooth_device');
+                },
+              ),
             ),
             const SizedBox(width: 16),
-            _buildTrackingCard(
-              title: 'Manual Entry',
-              icon: Icons.edit,
-              color: AppColors.secondary,
-              onTap: () => Navigator.pushNamed(context, '/manual_entry'),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        Row(
-          children: [
-            _buildTrackingCard(
-              title: 'AI Recommendations',
-              icon: Icons.auto_awesome,
-              color: AppColors.accent,
-              onTap: () => Navigator.pushNamed(context, '/recommendations'),
-            ),
-            const SizedBox(width: 16),
-            _buildTrackingCard(
-              title: 'Previous Sessions',
-              icon: Icons.history,
-              color: Colors.purple,
-              onTap: () => Navigator.pushNamed(context, '/previous_sessions'),
+            Expanded(
+              child: _buildQuickAccessCard(
+                'History',
+                Icons.history,
+                onTap: () {
+                  Navigator.pushNamed(context, '/history');
+                },
+              ),
             ),
           ],
         ),
@@ -522,92 +507,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTrackingCard({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
+  Widget _buildQuickAccessCard(
+    String title,
+    IconData icon, {
+    VoidCallback? onTap,
   }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.cardBackground,
-            borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ],
-          ),
+              child: Icon(icon, color: AppColors.primary),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+          ],
         ),
       ),
     );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good Morning';
-    } else if (hour < 17) {
-      return 'Good Afternoon';
-    } else {
-      return 'Good Evening';
-    }
-  }
-
-  Future<void> _connectRaspberryPi() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final result = await _exerciseService.connectToDevice();
-
-      if (result) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Successfully connected to device')),
-        );
-        Navigator.pushNamed(context, '/device_tracking');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to connect to device')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error connecting to device: ${e.toString()}')),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 }

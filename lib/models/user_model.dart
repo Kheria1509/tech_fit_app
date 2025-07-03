@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import '../models/dashboard_models.dart';
 
 enum Gender { male, female, other }
 
@@ -152,6 +154,9 @@ class ExerciseSession {
   final int? anaerobicThresholdHeartRate; // heart rate at AT
   final double? anaerobicThresholdVo2; // VO2 at AT
   final List<ExerciseDataPoint>? dataPoints; // time series data
+  final Duration? timeToReachAT; // Time taken to reach Anaerobic Threshold
+  final Duration? timeInAT; // Time spent in Anaerobic Threshold zone
+  final Map<WorkoutZone, Duration>? zoneDistribution; // Time spent in each zone
 
   ExerciseSession({
     required this.id,
@@ -168,6 +173,9 @@ class ExerciseSession {
     this.anaerobicThresholdHeartRate,
     this.anaerobicThresholdVo2,
     this.dataPoints,
+    this.timeToReachAT,
+    this.timeInAT,
+    this.zoneDistribution,
   });
 
   // Convert to Map for storing in Firestore
@@ -187,6 +195,11 @@ class ExerciseSession {
       'anaerobicThresholdHeartRate': anaerobicThresholdHeartRate,
       'anaerobicThresholdVo2': anaerobicThresholdVo2,
       'dataPoints': dataPoints?.map((point) => point.toMap()).toList(),
+      'timeToReachAT': timeToReachAT?.inSeconds,
+      'timeInAT': timeInAT?.inSeconds,
+      'zoneDistribution': zoneDistribution?.map(
+        (k, v) => MapEntry(k.toString(), v.inSeconds),
+      ),
     };
   }
 
@@ -210,6 +223,23 @@ class ExerciseSession {
           map['dataPoints'] != null
               ? List<ExerciseDataPoint>.from(
                 map['dataPoints'].map((x) => ExerciseDataPoint.fromMap(x)),
+              )
+              : null,
+      timeToReachAT:
+          map['timeToReachAT'] != null
+              ? Duration(seconds: map['timeToReachAT'])
+              : null,
+      timeInAT:
+          map['timeInAT'] != null ? Duration(seconds: map['timeInAT']) : null,
+      zoneDistribution:
+          map['zoneDistribution'] != null
+              ? Map.fromEntries(
+                map['zoneDistribution'].entries.map(
+                  (e) => MapEntry(
+                    WorkoutZone.values[int.parse(e.key)],
+                    Duration(seconds: e.value),
+                  ),
+                ),
               )
               : null,
     );

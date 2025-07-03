@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 // Auth
 import 'services/auth_service.dart';
 import 'providers/user_provider.dart';
+import 'providers/dashboard_provider.dart';
 
 // Screens
 import 'screens/onboarding_screen.dart';
@@ -19,6 +20,11 @@ import 'screens/exercise_screen.dart';
 import 'screens/device_tracking_screen.dart';
 import 'screens/previous_sessions_screen.dart';
 import 'screens/session_detail_screen.dart';
+import 'screens/bluetooth_device_screen.dart';
+import 'screens/dashboard_screen.dart';
+
+// Theme
+import 'theme/app_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +59,7 @@ class TechFitApp extends StatelessWidget {
               (context, authService, userProvider) =>
                   userProvider!..update(authService.currentUser),
         ),
+        ChangeNotifierProvider(create: (_) => DashboardProvider()),
       ],
       child: MaterialApp(
         title: 'TechFit',
@@ -74,9 +81,10 @@ class TechFitApp extends StatelessWidget {
           '/home': (context) => const HomeScreen(),
           '/stats': (context) => const StatsScreen(),
           '/profile': (context) => const ProfileScreen(),
-          '/exercise': (context) => const ExerciseScreen(),
+          '/bluetooth': (context) => const BluetoothDeviceScreen(),
           '/device_tracking': (context) => const DeviceTrackingScreen(),
           '/previous_sessions': (context) => const PreviousSessionsScreen(),
+          '/dashboard': (context) => const DashboardScreen(),
         },
       ),
     );

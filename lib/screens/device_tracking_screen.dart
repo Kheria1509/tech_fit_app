@@ -11,13 +11,37 @@ import '../services/exercise_service.dart';
 import '../providers/user_provider.dart';
 import '../models/user_model.dart';
 
+// Modern color palette
+class ModernColors {
+  static const Color primary = Color(0xFF3D5AF1);
+  static const Color secondary = Color(0xFF22B07D);
+  static const Color accent = Color(0xFFFF8A65);
+  static const Color background = Color(0xFFF8F9FC);
+  static const Color cardBackground = Color(0xFFFFFFFF);
+  static const Color textDark = Color(0xFF1F2937);
+  static const Color textMedium = Color(0xFF6B7280);
+  static const Color textLight = Color(0xFF9CA3AF);
+  static const Color divider = Color(0xFFE5E7EB);
+  static const Color error = Color(0xFFEF4444);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color aerobic = Color(0xFF22B07D);
+  static const Color anaerobic = Color(0xFFEF4444);
+}
+
+// Exercise zone enumeration
+enum ExerciseZone { easy, fatBurn, aerobic, anaerobic, max }
+
 // Data class for heart rate chart
 class HeartRateData {
   final int timeInSeconds;
   final double heartRate;
-  final bool isATPoint;
+  final bool isThresholdPoint;
 
-  HeartRateData(this.timeInSeconds, this.heartRate, {this.isATPoint = false});
+  HeartRateData(
+    this.timeInSeconds,
+    this.heartRate, {
+    this.isThresholdPoint = false,
+  });
 }
 
 class DeviceTrackingScreen extends StatefulWidget {
@@ -403,7 +427,6 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
           onPressed: () {
-            // Confirm before exiting if session is active
             if (_isSessionActive) {
               showDialog(
                 context: context,
@@ -420,9 +443,9 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
                         ),
                         TextButton(
                           onPressed: () {
-                            Navigator.pop(context); // Close dialog
+                            Navigator.pop(context);
                             _exerciseService.stopDataCollection();
-                            Navigator.pop(context); // Exit screen
+                            Navigator.pop(context);
                           },
                           child: const Text('Exit'),
                         ),
@@ -437,9 +460,8 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
       ),
       body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Anaerobic threshold notification
+            // AT Notification at the top
             if (_isShowingATMessage && _atReachedTimeSeconds != null)
               AnimatedBuilder(
                 animation: _atNotificationController,
@@ -476,12 +498,14 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
                                   color: Colors.white,
                                 ),
                                 const SizedBox(width: 8),
-                                const Text(
-                                  'Anaerobic Threshold Reached!',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                const Expanded(
+                                  child: Text(
+                                    'Anaerobic Threshold Reached!',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -507,300 +531,142 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
                 },
               ),
 
+            // Main content - Scrollable
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(AppConstants.defaultPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Status indicator
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            _isSessionActive
-                                ? AppColors.secondary.withOpacity(0.1)
-                                : Colors.grey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(
-                          AppConstants.borderRadius,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Status indicator
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.circle,
-                            size: 12,
-                            color:
-                                _isSessionActive
-                                    ? AppColors.secondary
-                                    : Colors.grey,
+                        decoration: BoxDecoration(
+                          color:
+                              _isSessionActive
+                                  ? AppColors.secondary.withOpacity(0.1)
+                                  : Colors.grey.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(
+                            AppConstants.borderRadius,
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isSessionActive
-                                ? 'Session in progress'
-                                : 'Ready to start',
-                            style: TextStyle(
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.circle,
+                              size: 12,
                               color:
                                   _isSessionActive
                                       ? AppColors.secondary
                                       : Colors.grey,
-                              fontWeight: FontWeight.w500,
                             ),
-                          ),
-                          const Spacer(),
-                          // Timer display
-                          Text(
-                            _formatDuration(
-                              _elapsedSeconds ~/ 60,
-                              _elapsedSeconds % 60,
+                            const SizedBox(width: 8),
+                            Text(
+                              _isSessionActive
+                                  ? 'Session in progress'
+                                  : 'Ready to start',
+                              style: TextStyle(
+                                color:
+                                    _isSessionActive
+                                        ? AppColors.secondary
+                                        : Colors.grey,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color:
-                                  _isSessionActive
-                                      ? AppColors.primary
-                                      : Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Enhanced Data Display
-                    if (_isSessionActive) _buildEnhancedDataDisplay(),
-
-                    const SizedBox(height: 16),
-
-                    // Heart Rate Chart
-                    if (_isSessionActive) ...[
-                      const Text(
-                        'Heart Rate',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-
-                      Container(
-                        height: 220,
-                        margin: const EdgeInsets.symmetric(vertical: 16),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(
-                            AppConstants.borderRadius,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                            const Spacer(),
+                            Text(
+                              _formatDuration(
+                                _elapsedSeconds ~/ 60,
+                                _elapsedSeconds % 60,
+                              ),
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    _isSessionActive
+                                        ? AppColors.primary
+                                        : Colors.grey,
+                              ),
                             ),
                           ],
                         ),
-                        child:
-                            _heartRateChartData.length < 2
-                                ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const CircularProgressIndicator(),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        'Collecting data...',
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                                : Stack(
-                                  children: [
-                                    SfCartesianChart(
-                                      plotAreaBorderWidth: 0,
-                                      margin: EdgeInsets.zero,
-                                      primaryXAxis: NumericAxis(
-                                        title: AxisTitle(
-                                          text: 'Time (seconds)',
-                                          textStyle: const TextStyle(
-                                            color: AppColors.textLight,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        majorGridLines: const MajorGridLines(
-                                          width: 0.5,
-                                          color: Colors.grey,
-                                        ),
-                                        axisLine: const AxisLine(
-                                          width: 0.5,
-                                          color: Colors.grey,
-                                        ),
-                                        minimum:
-                                            max(
-                                              0,
-                                              _elapsedSeconds - 60,
-                                            ).toDouble(),
-                                        maximum: max(
-                                          60,
-                                          _elapsedSeconds.toDouble(),
-                                        ),
-                                        interval: 10,
-                                        labelStyle: const TextStyle(
-                                          color: AppColors.textLight,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                      primaryYAxis: NumericAxis(
-                                        title: AxisTitle(
-                                          text: 'Heart Rate (bpm)',
-                                          textStyle: const TextStyle(
-                                            color: AppColors.textLight,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        minimum: 60,
-                                        maximum: 200,
-                                        interval: 20,
-                                        majorGridLines: const MajorGridLines(
-                                          width: 0.5,
-                                          color: Colors.grey,
-                                        ),
-                                        axisLine: const AxisLine(
-                                          width: 0.5,
-                                          color: Colors.grey,
-                                        ),
-                                        labelStyle: const TextStyle(
-                                          color: AppColors.textLight,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                      annotations: _getChartAnnotations(),
-                                      tooltipBehavior: TooltipBehavior(
-                                        enable: true,
-                                      ),
-                                      zoomPanBehavior: ZoomPanBehavior(
-                                        enablePanning: true,
-                                        zoomMode: ZoomMode.x,
-                                      ),
-                                      series: <
-                                        CartesianSeries<HeartRateData, int>
-                                      >[
-                                        // Main heart rate line
-                                        FastLineSeries<HeartRateData, int>(
-                                          onRendererCreated: (
-                                            ChartSeriesController controller,
-                                          ) {
-                                            _chartSeriesController = controller;
-                                          },
-                                          dataSource: _heartRateChartData,
-                                          xValueMapper:
-                                              (HeartRateData data, _) =>
-                                                  data.timeInSeconds,
-                                          yValueMapper:
-                                              (HeartRateData data, _) =>
-                                                  data.heartRate,
-                                          color: Colors.red.shade400,
-                                          width: 3,
-                                          markerSettings: MarkerSettings(
-                                            isVisible: true,
-                                            height: 5,
-                                            width: 5,
-                                            shape: DataMarkerType.circle,
-                                            borderWidth: 0,
-                                            color: Colors.red.shade400,
-                                          ),
-                                          enableTooltip: true,
-                                          animationDuration: 0,
-                                          name: 'Heart Rate',
-                                        ),
+                      ),
 
-                                        // Area under the heart rate line with gradient
-                                        AreaSeries<HeartRateData, int>(
-                                          dataSource: _heartRateChartData,
-                                          xValueMapper:
-                                              (HeartRateData data, _) =>
-                                                  data.timeInSeconds,
-                                          yValueMapper:
-                                              (HeartRateData data, _) =>
-                                                  data.heartRate,
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Colors.red.shade100.withOpacity(
-                                                0.1,
-                                              ),
-                                              Colors.red.shade400.withOpacity(
-                                                0.3,
-                                              ),
-                                            ],
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                          ),
-                                          borderColor: Colors.transparent,
-                                          animationDuration: 0,
-                                        ),
+                      const SizedBox(height: 20),
+
+                      // Enhanced Data Display
+                      if (_isSessionActive) _buildEnhancedDataDisplay(),
+
+                      const SizedBox(height: 16),
+
+                      // Heart Rate Chart
+                      if (_isSessionActive) ...[
+                        const Text(
+                          'Heart Rate',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        Container(
+                          height: 220,
+                          margin: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.borderRadius,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child:
+                              _heartRateChartData.length < 2
+                                  ? const Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        CircularProgressIndicator(),
+                                        SizedBox(height: 16),
+                                        Text('Collecting data...'),
                                       ],
                                     ),
-
-                                    // AT Label
-                                    if (_anaerobicThresholdReached &&
-                                        _atReachedTimeSeconds != null)
-                                      Positioned(
-                                        top: 5,
-                                        right: 10,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary
-                                                .withOpacity(0.8),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'Anaerobic Threshold',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                      ),
-                    ],
-
-                    // Action button
-                    const Spacer(),
-                    _isSessionActive
-                        ? AppButton(
-                          text: 'End Session',
-                          onPressed: _endSession,
-                          backgroundColor: Colors.red,
-                        )
-                        : AppButton(
-                          text: 'Start Session',
-                          onPressed: _startSession,
-                          icon: Icons.play_arrow,
+                                  )
+                                  : _buildHeartRateChart(),
                         ),
-                  ],
+                      ],
+                    ],
+                  ),
                 ),
               ),
+            ),
+
+            // Action button - Always visible at bottom
+            Padding(
+              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              child:
+                  _isSessionActive
+                      ? AppButton(
+                        text: 'End Session',
+                        onPressed: _endSession,
+                        backgroundColor: Colors.red,
+                      )
+                      : AppButton(
+                        text: 'Start Session',
+                        onPressed: _startSession,
+                        icon: Icons.play_arrow,
+                      ),
             ),
           ],
         ),
@@ -1090,69 +956,152 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
       _currentSpeed = data.speed;
       _currentHeartRate = data.heartRate;
       _currentCaloriesBurned += data.calories;
-      _elapsedSeconds += 1;
+      _currentDistance += (_currentSpeed / 3600); // Convert km/h to km/s
 
-      // Calculate distance increment based on speed (km/h) and time (1 second)
-      // Convert km/h to km/s and then multiply by time
-      _currentDistance +=
-          (_currentSpeed / 3600); // Convert km/h to km/s then multiply by 1s
-
-      // Update history data for charts (keep last 60 entries)
+      // Update history data
       _speedHistory.add(_currentSpeed);
       _heartRateHistory.add(_currentHeartRate);
 
-      // Build heart rate spot for fl_chart
+      // Add heart rate data point
       _heartRateChartData.add(
         HeartRateData(
           _elapsedSeconds,
           _currentHeartRate,
-          isATPoint:
+          isThresholdPoint:
               _anaerobicThresholdReached &&
               _atReachedTimeSeconds != null &&
-              _elapsedSeconds == _atReachedTimeSeconds!,
+              _elapsedSeconds == _atReachedTimeSeconds,
         ),
       );
 
-      if (_speedHistory.length > 60) {
-        _speedHistory.removeAt(0);
-      }
-      if (_heartRateHistory.length > 60) {
-        _heartRateHistory.removeAt(0);
-      }
-      if (_heartRateChartData.length > 60) {
-        _heartRateChartData.removeAt(0);
-      }
+      // Keep only last 60 seconds of data
+      if (_speedHistory.length > 60) _speedHistory.removeAt(0);
+      if (_heartRateHistory.length > 60) _heartRateHistory.removeAt(0);
+      if (_heartRateChartData.length > 60) _heartRateChartData.removeAt(0);
 
-      // Check for anaerobic threshold
-      if (!_anaerobicThresholdReached &&
-          _currentHeartRate > 160 &&
-          _elapsedSeconds > 45) {
-        _anaerobicThresholdReached = true;
-        _atReachedTimeSeconds = _elapsedSeconds;
-        _atSpeed = _currentSpeed; // Capture speed at AT
-        _atHeartRate = _currentHeartRate; // Capture heart rate at AT
-        _atTargetSpeed = max(
-          _currentSpeed - 1.0,
-          3.0,
-        ); // Target slightly lower speed
-        _isShowingATMessage = true;
-        _atNotificationController.forward(from: 0.0);
-
-        // Auto-dismiss notification after 8 seconds
-        Future.delayed(const Duration(seconds: 8), () {
-          if (mounted) {
-            setState(() {
-              _isShowingATMessage = false;
-            });
-          }
-        });
-      }
+      // Check for threshold crossing
+      _checkThresholdCrossing(_currentHeartRate);
     });
   }
 
+  Widget _buildHeartRateChart() {
+    return Stack(
+      children: [
+        SfCartesianChart(
+          plotAreaBorderWidth: 0,
+          margin: EdgeInsets.zero,
+          primaryXAxis: NumericAxis(
+            title: AxisTitle(
+              text: 'Time (seconds)',
+              textStyle: const TextStyle(
+                color: ModernColors.textLight,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            majorGridLines: const MajorGridLines(
+              width: 0.5,
+              color: ModernColors.divider,
+            ),
+            axisLine: const AxisLine(width: 0.5, color: ModernColors.divider),
+            minimum: max(0, _elapsedSeconds - 60).toDouble(),
+            maximum: max(60, _elapsedSeconds.toDouble()),
+            interval: 10,
+            labelStyle: const TextStyle(
+              color: ModernColors.textLight,
+              fontSize: 10,
+            ),
+          ),
+          primaryYAxis: NumericAxis(
+            title: AxisTitle(
+              text: 'Heart Rate (bpm)',
+              textStyle: const TextStyle(
+                color: ModernColors.textLight,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            minimum: 60,
+            maximum: 200,
+            interval: 20,
+            majorGridLines: const MajorGridLines(
+              width: 0.5,
+              color: ModernColors.divider,
+            ),
+            axisLine: const AxisLine(width: 0.5, color: ModernColors.divider),
+            labelStyle: const TextStyle(
+              color: ModernColors.textLight,
+              fontSize: 10,
+            ),
+          ),
+          annotations: _getChartAnnotations(),
+          tooltipBehavior: TooltipBehavior(enable: true),
+          zoomPanBehavior: ZoomPanBehavior(
+            enablePanning: true,
+            zoomMode: ZoomMode.x,
+          ),
+          series: _getChartSeries(),
+        ),
+        if (_anaerobicThresholdReached && _atReachedTimeSeconds != null)
+          Positioned(
+            top: 5,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: ModernColors.anaerobic.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'Anaerobic Zone',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   List<CartesianChartAnnotation> _getChartAnnotations() {
+    final List<CartesianChartAnnotation> annotations = [];
+
+    // Add aerobic threshold line
+    annotations.add(
+      CartesianChartAnnotation(
+        coordinateUnit: CoordinateUnit.point,
+        region: AnnotationRegion.chart,
+        x: max(0, _elapsedSeconds - 60).toDouble(),
+        y: _atHeartRate,
+        widget: Container(
+          height: 1,
+          width: MediaQuery.of(context).size.width,
+          color: ModernColors.aerobic.withOpacity(0.5),
+        ),
+      ),
+    );
+
+    // Add anaerobic threshold line
+    annotations.add(
+      CartesianChartAnnotation(
+        coordinateUnit: CoordinateUnit.point,
+        region: AnnotationRegion.chart,
+        x: max(0, _elapsedSeconds - 60).toDouble(),
+        y: _atHeartRate,
+        widget: Container(
+          height: 1,
+          width: MediaQuery.of(context).size.width,
+          color: ModernColors.anaerobic.withOpacity(0.5),
+        ),
+      ),
+    );
+
+    // Add threshold point marker if threshold was reached
     if (_anaerobicThresholdReached && _atReachedTimeSeconds != null) {
-      return [
+      annotations.add(
         CartesianChartAnnotation(
           coordinateUnit: CoordinateUnit.point,
           x: _atReachedTimeSeconds!.toDouble(),
@@ -1160,22 +1109,292 @@ class _DeviceTrackingScreenState extends State<DeviceTrackingScreen>
           widget: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              color: ModernColors.anaerobic,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Text(
-              'AT',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-              ),
+            child: const Icon(
+              Icons.arrow_upward,
+              color: Colors.white,
+              size: 12,
             ),
           ),
         ),
-      ];
+      );
     }
-    return [];
+
+    return annotations;
+  }
+
+  List<CartesianSeries<HeartRateData, int>> _getChartSeries() {
+    return [
+      FastLineSeries<HeartRateData, int>(
+        onRendererCreated: (ChartSeriesController controller) {
+          _chartSeriesController = controller;
+        },
+        dataSource: _heartRateChartData,
+        xValueMapper: (HeartRateData data, _) => data.timeInSeconds,
+        yValueMapper: (HeartRateData data, _) => data.heartRate,
+        color: ModernColors.primary,
+        width: 2,
+        markerSettings: MarkerSettings(
+          isVisible: true,
+          height: 4,
+          width: 4,
+          shape: DataMarkerType.circle,
+          borderWidth: 0,
+          color: ModernColors.primary,
+        ),
+        enableTooltip: true,
+        animationDuration: 0,
+        name: 'Heart Rate',
+      ),
+      AreaSeries<HeartRateData, int>(
+        dataSource: _heartRateChartData,
+        xValueMapper: (HeartRateData data, _) => data.timeInSeconds,
+        yValueMapper: (HeartRateData data, _) => data.heartRate,
+        gradient: LinearGradient(
+          colors: [
+            ModernColors.primary.withOpacity(0.1),
+            ModernColors.primary.withOpacity(0.05),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderColor: Colors.transparent,
+        animationDuration: 0,
+      ),
+    ];
+  }
+
+  Widget _buildMetricCard(
+    String label,
+    String value,
+    String unit,
+    IconData icon,
+    Color color,
+    double percentage,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ModernColors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: ModernColors.textMedium,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: ModernColors.textDark,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  unit,
+                  style: const TextStyle(
+                    color: ModernColors.textMedium,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: color.withOpacity(0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleMetricCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ModernColors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: ModernColors.textMedium,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: ModernColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getZoneColor(ExerciseZone zone) {
+    switch (zone) {
+      case ExerciseZone.easy:
+        return Colors.blue;
+      case ExerciseZone.fatBurn:
+        return Colors.green;
+      case ExerciseZone.aerobic:
+        return ModernColors.aerobic;
+      case ExerciseZone.anaerobic:
+        return ModernColors.anaerobic;
+      case ExerciseZone.max:
+        return ModernColors.error;
+    }
+  }
+
+  String _getZoneName(ExerciseZone zone) {
+    switch (zone) {
+      case ExerciseZone.easy:
+        return 'Easy';
+      case ExerciseZone.fatBurn:
+        return 'Fat Burn';
+      case ExerciseZone.aerobic:
+        return 'Aerobic';
+      case ExerciseZone.anaerobic:
+        return 'Anaerobic';
+      case ExerciseZone.max:
+        return 'Maximum';
+    }
+  }
+
+  Widget _buildChartLegend() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildLegendItem(
+            ModernColors.aerobic,
+            'Aerobic Threshold',
+            _atHeartRate.toInt().toString(),
+          ),
+          const SizedBox(width: 24),
+          _buildLegendItem(
+            ModernColors.anaerobic,
+            'Anaerobic Threshold',
+            _atHeartRate.toInt().toString(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label, String value) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: ModernColors.textMedium,
+                fontSize: 12,
+              ),
+            ),
+            Text(
+              '$value bpm',
+              style: const TextStyle(
+                color: ModernColors.textDark,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _checkThresholdCrossing(double heartRate) {
+    // Implementation of _checkThresholdCrossing method
   }
 }
 
